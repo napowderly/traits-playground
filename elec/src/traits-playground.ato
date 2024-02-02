@@ -1,0 +1,2 @@
+module TraitsPlayground:
+    signal gnd
