@@ -1,2 +1,104 @@
-module TraitsPlayground:
+import Inductor from "generics/inductors.ato"
+import Capacitor from "generics/capacitors.ato"
+import Diode from "generics/diodes.ato"
+import BuckController from "generics/switching-converters.ato"
+import NFET from "generics/mosfets.ato"
+import Power from "generics/power.ato"
+import VDiv from "generics/voltage-dividers.ato"
+
+# topological definition of a buck converter
+module Buck:
+    # Define external interfaces
+    power_in = new Power
+    power_out = new Power
     signal gnd
+    # Chainable single signal connections
+    power_in.gnd ~ gnd
+    power_out.gnd ~ gnd
+
+    # Define internal components
+    inductor = new Inductor
+    output_cap = new Capacitor
+    input_cap = new Capacitor
+    diode = new Diode
+    controller = new BuckController
+    nfet = new NFET
+    feedback_divider = new VDiv
+
+    # Connect internal components
+    controller.drive ~ nfet.gate
+    # Method to chain dipole components (feedback welcome)
+    power_in.vcc ~ nfet ~ inductor ~ power_out.vcc
+    diode.anode ~ gnd
+    diode.cathode ~ inductor.1
+
+    # Feedback divider (input is a power interface)
+    feedback_divider.input ~ power_out
+    feedback_divider.output ~ controller.feedback
+
+    eqn: power_out.voltage = feedback_divider.input.voltage
+    eqn: controller.feedback.voltage = feedback_divider.output.voltage
+
+    # Connect bypass capacitors
+    power_in ~ input_cap
+    power_out ~ output_cap
+
+#definition of a buck IC using traits
+component LM2841:
+    controller = new BuckController
+    nfet = new NFET
+    power_in = new Power
+
+    # Component data
+    footprint = "SOT-23-6_L2.9-W1.6-P0.95-LS2.8-BR"
+    mpn = "C225807"
+
+    signal cb ~ pin 1
+    signal gnd ~ pin 2
+    signal fb ~ pin 3
+    signal shdn ~ pin 4
+    signal vin ~ pin 5
+    signal sw ~ pin 6
+
+    # Required internal connections and configurations
+    bootcap = new Capacitor
+    cb ~ bootcap.p1
+    bootcap.p2 ~ sw
+
+    # Enabled by default
+    shdn ~ vin
+
+    # Connect internal components
+    controller.feedback ~ fb
+    sw ~ nfet.drain
+    power.vcc ~ vin
+    gnd ~ gnd
+
+    # Configure feedback
+    controller.feedback.voltage = 0.8V
+
+
+module NarayansBuck:
+    buck = new Buck
+    ic = new LM2841
+    ic.power_in ~ buck.power_in
+
+    # Map ICs traits to the buck topology
+    buck.controller -> ic.controller
+    buck.nfet -> ic.nfet
+
+    # Configure the buck components
+    buck.inductor.inductance = 10uH +/- 20%
+    input_cap.capacitance = 10uF +/- 20%
+    output_cap.capacitance = 10uF +/- 20%
+
+    # Configure feedback divider
+    buck.power_out.voltage = 5V +/- 5%
+
+# Generic case
+module NarayansBuck:
+    buck = new Buck
+
+    buck.power_in.voltage = 5V to 25V
+    buck.power_out.voltage = 5V +/- 5%
+    buck.power_out.current = 1A
